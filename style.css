@@ -1,0 +1,160 @@
+/*
+Theme Name: Porto Child
+Theme URI: https://www.portotheme.com/wordpress/porto
+Author: P-THEMES
+Author URI: https://www.portotheme.com/
+Description: Porto Responsive WordPress + eCommerce Theme.
+Version: 1.1
+Template: porto
+License: Commercial
+License URI: http://themeforest.net/licenses/regular_extended
+Tags: woocommerce, corporate, ecommerce, responsive, blue, black, green, white, light, dark, red, two-columns, three-columns, four-columns, left-sidebar, right-sidebar, fixed-layout, responsive-layout, custom-menu, editor-style, featured-images, flexible-header, full-width-template, microformats, post-formats, rtl-language-support, sticky-post, theme-options, translation-ready, accessibility-ready
+*/
+
+/*************** ADD YOUR CUSTOM CSS HERE  ***************/
+/*
+Theme Name: Surneli Child
+Theme URI: https://surneli.ge
+Description: Child theme for surneli.ge - native WooCommerce overrides replacing Porto Elementor templates
+Author: Bacho
+Template: porto
+Version: 1.0.0
+Text Domain: surneli-child
+*/
+
+/*
+IMPORTANT: The "Template:" line above must exactly match the folder name of your
+parent Porto theme (e.g. wp-content/themes/porto). Check this on your local site:
+
+    docker compose exec wpcli wp theme list --allow-root
+
+If Porto's folder is named something other than "porto" (e.g. "porto-theme" or
+similar), update the Template: line to match exactly, or the child theme will
+fail to activate.
+*/
+
+/* Card polish - tighten spacing/borders to match production */
+.products .product {
+    border: 1px solid #eee;
+    transition: box-shadow 0.2s ease;
+}
+
+.products .product:hover {
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+/* NOTE: TRENDING badge and wishlist/quick-view hover icon styling is
+   handled natively by Porto - confirmed working without custom CSS.
+   Do not re-add custom badge/icon CSS here unless something regresses. */
+
+/* Authenticity guarantee box - single product page */
+.surneli-authenticity-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    background: #f8f8f8;
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin: 24px 0;
+}
+
+.surneli-authenticity-box__icon {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+}
+
+.surneli-authenticity-box__title {
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.surneli-authenticity-box__link {
+    display: inline-block;
+    margin-top: 6px;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+/* Numbered pagination polish */
+nav.woocommerce-pagination ul.page-numbers {
+    display: flex;
+    gap: 8px;
+    list-style: none;
+    padding: 0;
+    margin: 32px 0;
+}
+
+nav.woocommerce-pagination ul.page-numbers li span,
+nav.woocommerce-pagination ul.page-numbers li a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    color: #333;
+    text-decoration: none;
+}
+
+nav.woocommerce-pagination ul.page-numbers li .current {
+    background: #000;
+    color: #fff;
+    border-color: #000;
+}
+
+/* Force 4-column shop grid, overriding Porto's ccols-* system */
+ul.products.products-container.grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    column-gap: 20px;
+    row-gap: 30px;
+}
+
+ul.products.products-container.grid > li.product-col {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: none !important;
+}
+
+@media (max-width: 991px) {
+    ul.products.products-container.grid {
+        grid-template-columns: repeat(3, 1fr) !important;
+    }
+}
+
+@media (max-width: 767px) {
+    ul.products.products-container.grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+.surneli-volume-note {
+    display: block;
+    margin: 8px 0 20px;
+    font-size: 15px;
+    color: #333;
+}
+/* Force variation label and options onto separate lines instead of
+   sitting side-by-side as table cells */
+table.variations,
+table.variations tbody,
+table.variations tr,
+table.variations th.label,
+table.variations td.value {
+    display: block !important;
+    width: 100% !important;
+}
+
+table.variations th.label {
+    margin-bottom: 12px;
+    padding: 0;
+}
+
+table.variations td.value {
+    padding: 0;
+}
+.add-links-wrap {
+    display: none !important;
+}
