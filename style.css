@@ -158,3 +158,17 @@ table.variations td.value {
 .add-links-wrap {
     display: none !important;
 }
+ul.products.products-container.grid > li.product-col {
+    min-width: 0 !important;
+}
+
+ul.products.products-container.grid .product-inner,
+ul.products.products-container.grid .product-content {
+    min-width: 0;
+}
+
+.woocommerce-loop-product__title {
+    overflow-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
+}
