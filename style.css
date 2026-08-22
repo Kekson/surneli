@@ -223,3 +223,39 @@ ul.products.products-container.grid .product-content {
     height: 100dvh;
     min-height: 100dvh;
 }
+
+/* ---------------------------------------------------------------
+   Prevent mobile auto-zoom-on-focus across all forms (checkout,
+   my account login/register, search, comments, Contact Form 7,
+   WPForms, Elementor forms).
+
+   Mobile WebKit (this is the shared rendering engine behind
+   Safari AND Chrome/any other browser on iOS - Apple requires all
+   iOS browsers to use it) auto-zooms the page when a focused
+   input's rendered font-size is under 16px, so the text is legible
+   while typing. It does not reliably zoom back out afterwards,
+   leaving the page zoomed in for the rest of checkout, which
+   customers rarely think to fix themselves via pinch/double-tap.
+
+   Porto's base input/select/textarea font-size is 0.85rem
+   (~13.6px), and fields that rule doesn't cover (email, tel, etc.)
+   fall back to the theme's ~14px body size - both under the 16px
+   threshold. Raising every form field to 16px on mobile (desktop
+   is untouched) stops the zoom from triggering in the first place,
+   which is more reliable than trying to zoom back out after.
+   !important guards against plugin-specific form CSS (Elementor,
+   WPForms, CF7) that may otherwise win on selector specificity. */
+@media (max-width: 767px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="password"],
+    input[type="number"],
+    input[type="search"],
+    input[type="url"],
+    input[type="date"],
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+}
