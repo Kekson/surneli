@@ -172,35 +172,3 @@ ul.products.products-container.grid .product-content {
     word-break: break-word;
     hyphens: auto;
 }
-
-/* ---------------------------------------------------------------
-   Cart popup fix: "View cart" / "Checkout" buttons hidden at the
-   bottom of the mini-cart flyout.
-
-   Porto's mini-cart flyout (#mini-cart.minicart-offcanvas) is a
-   fixed, full-height (100vh) flex column: item list on top, total +
-   buttons pinned below. The item list (.cart_list) has a hardcoded
-   "min-height: 45px" floor from the theme's base CSS (meant for the
-   small desktop dropdown variant) which also leaks into this
-   full-height flyout. That floor stops the list from shrinking
-   enough to make room for the total/buttons row whenever the
-   available height is tight - e.g. shorter browser windows, laptops
-   with a lot of browser chrome, or mobile landscape orientation -
-   pushing "View cart" and "Checkout" below the visible edge of the
-   panel. Removing the floor here lets the list shrink (and scroll
-   internally) as needed so the buttons stay on-screen; the two
-   safety rules underneath make sure the buttons are never the part
-   that gets squeezed, and that the panel can scroll as a last
-   resort if content is still taller than the viewport. ---------- */
-#mini-cart.minicart-offcanvas .widget_shopping_cart_content .cart_list {
-    min-height: 0;
-}
-
-#mini-cart.minicart-offcanvas .widget_shopping_cart_content {
-    overflow-y: auto;
-}
-
-#mini-cart.minicart-offcanvas .woocommerce-mini-cart__total,
-#mini-cart.minicart-offcanvas .woocommerce-mini-cart__buttons {
-    flex-shrink: 0;
-}
