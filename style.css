@@ -204,3 +204,22 @@ ul.products.products-container.grid .product-content {
 #mini-cart.minicart-offcanvas .woocommerce-mini-cart__buttons {
     flex-shrink: 0;
 }
+
+/* ---------------------------------------------------------------
+   Cart popup fix, part 2: buttons still hidden on real mobile
+   Safari even with a single item in the cart.
+
+   Porto sizes the offcanvas flyout with a static
+   "height:100%; min-height:100vh" on #mini-cart.minicart-offcanvas
+   .cart-popup. On iOS Safari, 100vh is calculated against the
+   *maximum* viewport (as if the address bar + bottom toolbar were
+   hidden), not the actually-visible area - so the panel silently
+   extends past what's on screen and drags the total/buttons row
+   down under the browser's own toolbar, regardless of item count.
+   "dvh" (dynamic viewport height) tracks the real visible area and
+   is supported by all current mobile browsers; keep the vh rule
+   above it as a fallback for anything that doesn't understand dvh. */
+#mini-cart.minicart-offcanvas .cart-popup {
+    height: 100dvh;
+    min-height: 100dvh;
+}
