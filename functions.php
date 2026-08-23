@@ -405,7 +405,7 @@ function surneli_custom_checkout_fields($fields)
     // Unset unused fields
     unset($fields['billing']['billing_company']);
     unset($fields['billing']['billing_address_2']);
-    // unset($fields['billing']['billing_email']);
+    unset($fields['billing']['billing_email']); // removed: accounts are phone-only now, no checkout use for it
 
 
     // REORDER: Now that CSS isn't fighting us, this will work visually
