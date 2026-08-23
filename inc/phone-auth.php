@@ -47,6 +47,15 @@ class Surneli_Phone_Auth {
 		// phone and see their past orders - no separate "register" step.
 		add_action('woocommerce_checkout_order_processed', [__CLASS__, 'maybe_create_account_from_order'], 10, 1);
 		add_filter('pre_wp_mail', [__CLASS__, 'block_placeholder_email'], 10, 2);
+
+		// Some orders may carry the placeholder in their own stored
+		// billing_email (e.g. left over from before this field was
+		// removed from checkout, on a resumed pending order) - strip it
+		// wherever an order's billing email is read for display, not
+		// just at checkout time.
+		add_filter('woocommerce_order_get_billing_email', function ($value) {
+			return self::is_placeholder_email($value) ? '' : $value;
+		});
 	
 
 		// The checkout's own "create an account?" checkbox + password
