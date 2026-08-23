@@ -1,6 +1,11 @@
 <?php
 
 /**
+ * Phone-number registration & login (see inc/phone-auth.php).
+ */
+require_once get_stylesheet_directory() . '/inc/phone-auth.php';
+
+/**
  * 1. Load Child Theme CSS
  */
 add_action('wp_enqueue_scripts', 'porto_child_css', 1001);
@@ -923,6 +928,62 @@ class Surneli_SMS_Gateway {
 		}
 
 		// error_log('SMS Office Failed. Response body: ' . $body);
+		return false;
+	}
+
+	/**
+	 * Blocking variant of send_sms(), used only for the phone-login SMS
+	 * code. We need to actually know whether the message went out before
+	 * telling the customer "code sent" - the fire-and-forget version
+	 * above is fine for order notifications where nobody is staring at
+	 * the screen waiting, but wrong here.
+	 */
+	public static function send_sms_blocking($phone, $message) {
+		if (empty($phone) || empty($message)) {
+			return false;
+		}
+
+		$phone = preg_replace('/[^0-9]/', '', $phone);
+
+		if (strlen($phone) === 9 && strpos($phone, '5') === 0) {
+			$phone = '995' . $phone;
+		}
+
+		$url = add_query_arg(
+			array(
+				'key'         => self::$api_key,
+				'destination' => $phone,
+				'sender'      => self::$sender,
+				'content'     => rawurlencode($message),
+				'urgent'      => 'true',
+			),
+			'https://smsoffice.ge/api/v2/send/'
+		);
+
+		$response = wp_remote_get($url, array(
+			'timeout'  => 8,
+			'blocking' => true,
+		));
+
+		if (is_wp_error($response)) {
+			return false;
+		}
+
+		$body = wp_remote_retrieve_body($response);
+
+		// The blocking endpoint replies with JSON, e.g.
+		// {"Success":true,"Message":"accepted","Output":null,"ErrorCode":0}
+		// - unlike the fire-and-forget send_sms() above, which never
+		// actually reads the body (blocking:false) so its old numeric-ID
+		// comment was never really exercised.
+		$decoded = json_decode($body, true);
+
+		if (is_array($decoded) && !empty($decoded['Success'])) {
+			return true;
+		}
+
+		error_log('Surneli SMS Office send failed - response code: ' . wp_remote_retrieve_response_code($response) . ' body: ' . substr((string) $body, 0, 500));
+
 		return false;
 	}
 }

@@ -1,0 +1,293 @@
+<?php
+/**
+ * Surneli Phone Auth
+ * -------------------
+ * Replaces email+password registration/login with a single
+ * "phone number + 4-digit SMS code" flow for customers, on both
+ * the My Account page and checkout account creation.
+ *
+ * wp-admin login is completely untouched - this only affects the
+ * customer-facing account system.
+ *
+ * Identity model: WordPress still requires a unique user_email
+ * internally, so each account gets an auto-generated placeholder
+ * (<phone>@phone.surneli.ge) the customer never sees or uses. The
+ * real identifier customers interact with is just their phone
+ * number; wp_insert_user's user_login is set to the local 9-digit
+ * number, and a random password is generated once and never used -
+ * login always happens through the SMS code, never a password.
+ */
+
+if (!defined('ABSPATH')) {
+	exit;
+}
+
+class Surneli_Phone_Auth {
+
+	const CODE_LENGTH      = 4;
+	const CODE_TTL         = 300; // seconds a code stays valid (5 min)
+	const RESEND_COOLDOWN  = 45;  // seconds before a customer can request another code
+	const MAX_ATTEMPTS     = 5;   // wrong guesses allowed before a code is burned
+	const REMEMBER_DAYS    = 60;  // how long a verified customer stays logged in
+	const EMAIL_SUFFIX     = '@phone.surneli.ge'; // placeholder email domain, never shown to customers
+
+	public static function init() {
+		add_action('wp_ajax_nopriv_surneli_send_code', [__CLASS__, 'ajax_send_code']);
+		add_action('wp_ajax_surneli_send_code', [__CLASS__, 'ajax_send_code']);
+		add_action('wp_ajax_nopriv_surneli_verify_code', [__CLASS__, 'ajax_verify_code']);
+		add_action('wp_ajax_surneli_verify_code', [__CLASS__, 'ajax_verify_code']);
+
+		add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue_assets']);
+
+		// Keep a verified customer logged in for weeks, not the WP default.
+		add_filter('auth_cookie_expiration', [__CLASS__, 'extend_remembered_session'], 10, 3);
+
+		// A guest checkout silently gets an account attached to their phone
+		// number, so next time they come back they can just verify their
+		// phone and see their past orders - no separate "register" step.
+		add_action('woocommerce_checkout_order_processed', [__CLASS__, 'maybe_create_account_from_order'], 10, 1);
+	
+
+		// The checkout's own "create an account?" checkbox + password
+		// field become redundant once every order silently gets an
+		// account attached via the phone number above - hide it so
+		// checkout stays exactly as simple as it is today.
+		add_filter('pre_option_woocommerce_enable_signup_and_login_from_checkout', function () {
+			return 'no';
+		});
+	
+
+		// Never let the auto-generated placeholder email
+		// (<phone>@phone.surneli.ge) show up anywhere a customer can
+		// see it - it exists purely to satisfy WordPress's internal
+		// requirement that every account have an email on file.
+		add_filter('default_checkout_billing_email', function ($value) {
+			return self::is_placeholder_email($value) ? '' : $value;
+		});
+	}
+
+	/* ---------------------------------------------------------------
+	   Helpers
+	--------------------------------------------------------------- */
+
+	private static function normalize_phone($raw) {
+		$digits = preg_replace('/\D+/', '', (string) $raw);
+		$digits = preg_replace('/^995/', '', $digits);
+		if (!preg_match('/^5\d{8}$/', $digits)) {
+			return false;
+		}
+		return $digits; // local 9-digit form, e.g. 555123456
+	}
+
+	private static function is_placeholder_email($email) {
+		return is_string($email) && str_ends_with($email, self::EMAIL_SUFFIX);
+	}
+
+	private static function otp_key($phone) {
+		return 'surneli_otp_' . $phone;
+	}
+
+	private static function cooldown_key($phone) {
+		return 'surneli_otp_cd_' . $phone;
+	}
+
+	/* ---------------------------------------------------------------
+	   AJAX: send code
+	--------------------------------------------------------------- */
+
+	public static function ajax_send_code() {
+		check_ajax_referer('surneli_phone_auth', 'nonce');
+
+		$phone = self::normalize_phone($_POST['phone'] ?? '');
+		if (!$phone) {
+			wp_send_json_error(['message' => 'გთხოვთ შეიყვანოთ სწორი ნომერი (მაგ: 555123456)']);
+		}
+
+		if (get_transient(self::cooldown_key($phone))) {
+			wp_send_json_error(['message' => 'კოდი უკვე გაიგზავნა, სცადეთ რამდენიმე წამში']);
+		}
+
+		$code = str_pad((string) wp_rand(0, 9999), self::CODE_LENGTH, '0', STR_PAD_LEFT);
+
+		set_transient(self::otp_key($phone), [
+			'hash'     => wp_hash($code),
+			'attempts' => 0,
+		], self::CODE_TTL);
+
+		set_transient(self::cooldown_key($phone), 1, self::RESEND_COOLDOWN);
+
+		// The "@domain #code" footer lets the WebOTP API auto-read the
+		// code on supporting Android/Chrome without the customer typing
+		// or even opening the Messages app - pure bonus, harmless on
+		// phones/browsers that ignore it (iOS reads the plain number).
+		$message = "თქვენი კოდია: {$code}\n\n@surneli.ge #{$code}";
+		$sent = Surneli_SMS_Gateway::send_sms_blocking($phone, $message);
+
+		if (!$sent) {
+			delete_transient(self::otp_key($phone));
+			delete_transient(self::cooldown_key($phone));
+			wp_send_json_error(['message' => 'SMS ვერ გაიგზავნა, სცადეთ ხელახლა']);
+		}
+
+		wp_send_json_success([
+			'message'  => 'კოდი გამოგზავნილია',
+			'cooldown' => self::RESEND_COOLDOWN,
+		]);
+	}
+
+	/* ---------------------------------------------------------------
+	   AJAX: verify code + log in / create account
+	--------------------------------------------------------------- */
+
+	public static function ajax_verify_code() {
+		check_ajax_referer('surneli_phone_auth', 'nonce');
+
+		$phone = self::normalize_phone($_POST['phone'] ?? '');
+		$code  = preg_replace('/\D+/', '', (string) ($_POST['code'] ?? ''));
+
+		if (!$phone || strlen($code) !== self::CODE_LENGTH) {
+			wp_send_json_error(['message' => 'არასწორი კოდი']);
+		}
+
+		$data = get_transient(self::otp_key($phone));
+		if (!$data) {
+			wp_send_json_error(['message' => 'კოდის ვადა გავიდა, გამოგზავნეთ ახალი']);
+		}
+
+		if ($data['attempts'] >= self::MAX_ATTEMPTS) {
+			delete_transient(self::otp_key($phone));
+			wp_send_json_error(['message' => 'ცდების ლიმიტი ამოწურულია, გამოგზავნეთ ახალი კოდი']);
+		}
+
+		if (!hash_equals($data['hash'], wp_hash($code))) {
+			$data['attempts']++;
+			set_transient(self::otp_key($phone), $data, self::CODE_TTL);
+			wp_send_json_error(['message' => 'არასწორი კოდი, სცადეთ ხელახლა']);
+		}
+
+		delete_transient(self::otp_key($phone));
+		delete_transient(self::cooldown_key($phone));
+
+		$user = self::get_or_create_user($phone);
+		if (!$user) {
+			wp_send_json_error(['message' => 'დაფიქსირდა შეცდომა, სცადეთ მოგვიანებით']);
+		}
+
+		wp_set_current_user($user->ID);
+		wp_set_auth_cookie($user->ID, true); // true = "remember me", extended below
+		do_action('wp_login', $user->user_login, $user);
+
+		wp_send_json_success([
+			'redirect' => wc_get_page_permalink('myaccount'),
+		]);
+	}
+
+	/* ---------------------------------------------------------------
+	   Find or create the WP user tied to a phone number
+	--------------------------------------------------------------- */
+
+	private static function get_or_create_user($phone) {
+		// 1. Phone-native accounts (created by this flow) use the phone
+		//    number itself as the username.
+		$user = get_user_by('login', $phone);
+		if ($user) {
+			return $user;
+		}
+
+		// 2. Older accounts (created pre-phone-login, or via a guest
+		//    checkout) may have a different username but the same
+		//    billing phone on file - match those too, so people don't
+		//    end up split across two accounts.
+		$by_meta = get_users([
+			'meta_key'   => 'billing_phone',
+			'meta_value' => $phone,
+			'number'     => 1,
+			'fields'     => 'all',
+		]);
+		if (!empty($by_meta)) {
+			update_user_meta($by_meta[0]->ID, 'surneli_phone', $phone);
+			return $by_meta[0];
+		}
+
+		$user_id = wp_insert_user([
+			'user_login' => $phone,
+			'user_pass'  => wp_generate_password(32, true, true), // never used - login is always by SMS code
+			'user_email' => $phone . self::EMAIL_SUFFIX,
+			'role'       => 'customer',
+		]);
+
+		if (is_wp_error($user_id)) {
+			return false;
+		}
+
+		update_user_meta($user_id, 'surneli_phone', $phone);
+		update_user_meta($user_id, 'billing_phone', $phone);
+
+		return get_user_by('id', $user_id);
+	}
+
+	/* ---------------------------------------------------------------
+	   Silently attach an account to a guest checkout order
+	--------------------------------------------------------------- */
+
+	public static function maybe_create_account_from_order($order_id) {
+		if (is_user_logged_in()) {
+			return;
+		}
+
+		$order = wc_get_order($order_id);
+		if (!$order) {
+			return;
+		}
+
+		$phone = self::normalize_phone($order->get_billing_phone());
+		if (!$phone) {
+			return;
+		}
+
+		$user = self::get_or_create_user($phone);
+		if ($user) {
+			$order->set_customer_id($user->ID);
+			$order->save();
+		}
+	}
+
+	/* ---------------------------------------------------------------
+	   Keep verified customers signed in for weeks, not WordPress's
+	   2/14-day default.
+	--------------------------------------------------------------- */
+
+	public static function extend_remembered_session($expiration, $user_id, $remember) {
+		if ($remember) {
+			return self::REMEMBER_DAYS * DAY_IN_SECONDS;
+		}
+		return $expiration;
+	}
+
+	/* ---------------------------------------------------------------
+	   Assets
+	--------------------------------------------------------------- */
+
+	public static function enqueue_assets() {
+		if (!is_account_page() && !is_checkout()) {
+			return;
+		}
+
+		$js_path = get_stylesheet_directory() . '/js/phone-auth.js';
+
+		wp_enqueue_script(
+			'surneli-phone-auth',
+			get_stylesheet_directory_uri() . '/js/phone-auth.js',
+			[],
+			file_exists($js_path) ? filemtime($js_path) : null,
+			true
+		);
+
+		wp_localize_script('surneli-phone-auth', 'surneliPhoneAuth', [
+			'ajaxUrl' => admin_url('admin-ajax.php'),
+			'nonce'   => wp_create_nonce('surneli_phone_auth'),
+		]);
+	}
+}
+
+Surneli_Phone_Auth::init();

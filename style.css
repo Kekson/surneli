@@ -259,3 +259,126 @@ ul.products.products-container.grid .product-content {
         font-size: 16px !important;
     }
 }
+
+/* ---------------------------------------------------------------
+   Phone-number login/registration (My Account + checkout).
+   See inc/phone-auth.php and js/phone-auth.js.
+   ---------------------------------------------------------------- */
+.surneli-phone-auth {
+    max-width: 360px;
+    margin: 0 auto;
+    padding: 2rem 0;
+    text-align: center;
+}
+
+.surneli-phone-auth h2 {
+    margin-bottom: 0.5rem;
+}
+
+.surneli-phone-auth .spa-sub {
+    color: var(--porto-body-color, #777);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    margin-bottom: 1.5rem;
+}
+
+.surneli-phone-auth .spa-phone-row {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.surneli-phone-auth .spa-prefix {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    background: #f5f5f5;
+    color: #555;
+    font-weight: 600;
+    border-right: 1px solid #ddd;
+}
+
+.surneli-phone-auth #spa-phone {
+    flex: 1;
+    height: 50px;
+    border: none !important;
+    padding: 0 12px;
+    letter-spacing: 0.5px;
+}
+
+.surneli-phone-auth .spa-btn {
+    display: block;
+    width: 100%;
+    height: 50px;
+    line-height: 50px;
+    padding: 0 !important;
+    font-size: 1rem !important;
+    letter-spacing: 0.3px;
+}
+
+.surneli-phone-auth .spa-code-input {
+    display: block;
+    width: 100%;
+    height: 64px;
+    text-align: center;
+    font-size: 2rem !important;
+    font-weight: 700;
+    letter-spacing: 1rem;
+    text-indent: 1rem; /* re-center against the trailing letter-spacing gap */
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.surneli-phone-auth .spa-error {
+    color: #d63638;
+    font-size: 0.8125rem;
+    min-height: 1.2em;
+    margin: 0.5rem 0;
+}
+
+.surneli-phone-auth .spa-resend {
+    font-size: 0.8125rem;
+    color: var(--porto-body-color, #777);
+}
+
+.surneli-phone-auth .spa-resend a.spa-disabled {
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+.surneli-phone-auth .spa-step-loading {
+    display: flex;
+    justify-content: center;
+    padding: 3rem 0;
+}
+
+.surneli-phone-auth .spa-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #eee;
+    border-top-color: var(--porto-primary-color, #333);
+    border-radius: 50%;
+    animation: spa-spin 0.7s linear infinite;
+}
+
+@keyframes spa-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ---------------------------------------------------------------
+   My Account -> Account details: hide the email field.
+   It only ever holds the internal placeholder address
+   (<phone>@phone.surneli.ge) - accounts are phone-only now, so
+   there's nothing real for a customer to see or edit here.
+   ---------------------------------------------------------------- */
+.woocommerce-EditAccountForm .woocommerce-form-row:has(#account_email),
+.woocommerce-EditAccountForm label[for="account_email"],
+.woocommerce-EditAccountForm #account_email {
+    display: none !important;
+}
