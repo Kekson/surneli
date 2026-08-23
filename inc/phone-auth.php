@@ -219,7 +219,7 @@ class Surneli_Phone_Auth {
 		do_action('wp_login', $user->user_login, $user);
 
 		wp_send_json_success([
-			'redirect' => wc_get_page_permalink('myaccount'),
+			'redirect' => wc_get_page_permalink('shop'),
 		]);
 	}
 
