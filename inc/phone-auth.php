@@ -46,6 +46,7 @@ class Surneli_Phone_Auth {
 		// number, so next time they come back they can just verify their
 		// phone and see their past orders - no separate "register" step.
 		add_action('woocommerce_checkout_order_processed', [__CLASS__, 'maybe_create_account_from_order'], 10, 1);
+		add_filter('pre_wp_mail', [__CLASS__, 'block_placeholder_email'], 10, 2);
 	
 
 		// The checkout's own "create an account?" checkbox + password
@@ -246,10 +247,38 @@ class Surneli_Phone_Auth {
 		}
 
 		$user = self::get_or_create_user($phone);
-		if ($user) {
-			$order->set_customer_id($user->ID);
-			$order->save();
+		if (!$user) {
+			return;
 		}
+
+		$order->set_customer_id($user->ID);
+		$order->save();
+
+		// Without this, WooCommerce sees the order now belongs to a real
+		// account and gates the order-received page behind a login form -
+		// for an account the customer never manually created or knew
+		// existed. Log them straight in instead.
+		wp_set_current_user($user->ID);
+		wp_set_auth_cookie($user->ID, true);
+	}
+
+	/* ---------------------------------------------------------------
+	   Never actually mail the placeholder address - nothing reads that
+	   inbox, it may not even resolve, and customers already get order
+	   updates by SMS. Silently "succeeds" instead of erroring/retrying.
+	--------------------------------------------------------------- */
+
+	public static function block_placeholder_email($return, $atts) {
+		$to = $atts['to'] ?? '';
+		$recipients = is_array($to) ? $to : explode(',', (string) $to);
+
+		foreach ($recipients as $address) {
+			if (self::is_placeholder_email(trim((string) $address))) {
+				return true;
+			}
+		}
+
+		return $return;
 	}
 
 	/* ---------------------------------------------------------------
