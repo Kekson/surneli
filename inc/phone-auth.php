@@ -56,6 +56,13 @@ class Surneli_Phone_Auth {
 		add_filter('woocommerce_order_get_billing_email', function ($value) {
 			return self::is_placeholder_email($value) ? '' : $value;
 		});
+
+		// "Confirm your email address to check for past orders and link
+		// them to your account" - a WooCommerce prompt asking customers to
+		// verify an email address they never see or use. Stripped by
+		// content match on the Orders tab, since it isn't tied to a single
+		// filterable hook.
+		add_filter('the_content', [__CLASS__, 'strip_email_verification_notice'], 20);
 	
 
 		// The checkout's own "create an account?" checkbox + password
@@ -119,9 +126,16 @@ class Surneli_Phone_Auth {
 
 		$code = str_pad((string) wp_rand(0, 9999), self::CODE_LENGTH, '0', STR_PAD_LEFT);
 
+		// Keep every code sent within the current window valid, not just
+		// the newest one - a resend shouldn't invalidate a first message
+		// that's simply running late but still on its way.
+		$existing = get_transient(self::otp_key($phone));
+		$hashes   = is_array($existing) && !empty($existing['hashes']) ? $existing['hashes'] : [];
+		$hashes[] = wp_hash($code);
+
 		set_transient(self::otp_key($phone), [
-			'hash'     => wp_hash($code),
-			'attempts' => 0,
+			'hashes'   => $hashes,
+			'attempts' => is_array($existing) && isset($existing['attempts']) ? $existing['attempts'] : 0,
 		], self::CODE_TTL);
 
 		set_transient(self::cooldown_key($phone), 1, self::RESEND_COOLDOWN);
@@ -134,7 +148,14 @@ class Surneli_Phone_Auth {
 		$sent = Surneli_SMS_Gateway::send_sms_blocking($phone, $message);
 
 		if (!$sent) {
-			delete_transient(self::otp_key($phone));
+			// Roll back to whatever was valid before this attempt, rather
+			// than wiping out a code from an earlier successful send just
+			// because this particular resend failed to go out.
+			if ($existing) {
+				set_transient(self::otp_key($phone), $existing, self::CODE_TTL);
+			} else {
+				delete_transient(self::otp_key($phone));
+			}
 			delete_transient(self::cooldown_key($phone));
 			wp_send_json_error(['message' => 'SMS ვერ გაიგზავნა, სცადეთ ხელახლა']);
 		}
@@ -169,7 +190,17 @@ class Surneli_Phone_Auth {
 			wp_send_json_error(['message' => 'ცდების ლიმიტი ამოწურულია, გამოგზავნეთ ახალი კოდი']);
 		}
 
-		if (!hash_equals($data['hash'], wp_hash($code))) {
+		$submitted_hash = wp_hash($code);
+		$code_matches   = false;
+
+		foreach ((array) ($data['hashes'] ?? []) as $stored_hash) {
+			if (hash_equals($stored_hash, $submitted_hash)) {
+				$code_matches = true;
+				break;
+			}
+		}
+
+		if (!$code_matches) {
 			$data['attempts']++;
 			set_transient(self::otp_key($phone), $data, self::CODE_TTL);
 			wp_send_json_error(['message' => 'არასწორი კოდი, სცადეთ ხელახლა']);
@@ -288,6 +319,18 @@ class Surneli_Phone_Auth {
 		}
 
 		return $return;
+	}
+
+	public static function strip_email_verification_notice($content) {
+		if (!is_account_page() || !function_exists('is_wc_endpoint_url') || !is_wc_endpoint_url('orders')) {
+			return $content;
+		}
+
+		return preg_replace(
+			'#<div class="woocommerce-info"[^>]*>.*?wc_send_verification.*?</div>#s',
+			'',
+			$content
+		);
 	}
 
 	/* ---------------------------------------------------------------
