@@ -6,6 +6,45 @@
 require_once get_stylesheet_directory() . '/inc/phone-auth.php';
 
 /**
+ * 1a. Checkout fields fall back to the customer's saved account address.
+ *
+ * WooCommerce keeps in-progress checkout field values in the WC session
+ * (not the account), and only copies them into the account's usermeta
+ * after an order is placed (see sync_customer_from_order() in
+ * inc/phone-auth.php). That session value can come back empty on a fresh
+ * page load - e.g. after leaving for the payment gateway and coming back -
+ * even though the account itself still has the customer's last saved
+ * address. When that happens, prefer the account's saved value over
+ * showing the field empty.
+ */
+add_action('init', 'surneli_prefill_checkout_from_account');
+function surneli_prefill_checkout_from_account()
+{
+    $fields = array(
+        'billing_first_name',
+        'billing_last_name',
+        'billing_phone',
+        'billing_country',
+        'billing_state',
+        'billing_city',
+        'billing_address_1',
+        'billing_postcode',
+    );
+
+    foreach ($fields as $field) {
+        add_filter('default_checkout_' . $field, function ($value) use ($field) {
+            if (!empty($value) || !is_user_logged_in()) {
+                return $value;
+            }
+
+            $account_value = get_user_meta(get_current_user_id(), $field, true);
+
+            return !empty($account_value) ? $account_value : $value;
+        });
+    }
+}
+
+/**
  * 1. Load Child Theme CSS
  */
 add_action('wp_enqueue_scripts', 'porto_child_css', 1001);
@@ -27,7 +66,6 @@ function porto_child_css()
         wp_enqueue_style('styles-child-rtl');
     }
 } // <-- THIS BRACE WAS MISSING! It closes the CSS function so the rest of the file works.
-
 
 /**
  * 2. Force Georgian Regions
@@ -58,8 +96,42 @@ add_filter('woocommerce_default_address_fields', 'surneli_force_city_select_nati
 function surneli_force_city_select_native($fields)
 {
     $fields['city']['type'] = 'select'; // Stops WooCommerce from turning it into a text box
-    $fields['city']['options'] = array('' => 'აირჩიეთ ლოკაცია...');
+    $fields['city']['options'] = surneli_get_city_select_options();
     return $fields;
+}
+
+/**
+ * Build the City <select> options for whichever region is already
+ * known for this checkout (customer/session). Without this, the
+ * field only ever rendered with the placeholder option on a fresh
+ * PHP page load - the real list was only ever built by JS after
+ * the page loaded, so there was no matching <option> for WooCommerce
+ * to mark as selected. That made a previously chosen city look
+ * 'discarded' any time the checkout page did a real reload, e.g.
+ * going to the payment gateway and back.
+ */
+function surneli_get_city_select_options()
+{
+    $options = array('' => 'აირჩიეთ ლოკაცია...');
+
+    $region = (function_exists('WC') && WC()->customer) ? WC()->customer->get_billing_state() : '';
+
+    // Same session-timing gap as the fallback in surneli_prefill_checkout_from_account():
+    // fall back to the account's saved region so the city list itself isn't empty either.
+    if (empty($region) && is_user_logged_in()) {
+        $region = get_user_meta(get_current_user_id(), 'billing_state', true);
+    }
+
+    if (!empty($region)) {
+        $city_map = get_surneli_city_map();
+        if (!empty($city_map[$region])) {
+            foreach ($city_map[$region] as $city_name) {
+                $options[$city_name] = $city_name;
+            }
+        }
+    }
+
+    return $options;
 }
 
 /**
@@ -278,25 +350,48 @@ function surneli_checkout_city_logic() {
                 // Read the map securely from PHP
                 var cityMap = <?php echo json_encode($php_city_map); ?>;
 
-                function updateSurneliCities(preserveSelection) {
+                // Rebuild the city dropdown for the currently selected
+                // region. IMPORTANT: this is called both for genuine
+                // user-driven region changes AND for spurious 'change'
+                // events that WooCommerce/select2 fire programmatically
+                // while the checkout page is still initializing (e.g.
+                // during their own field/select2 setup, before our own
+                // 100ms restore timer below even runs). Because of that,
+                // we can no longer trust a boolean "was this a real user
+                // action" flag - a prior version of this code took a
+                // preserveSelection flag and cleared it to '' for the
+                // #billing_state change handler, which meant an early
+                // spurious change event wiped the server-rendered city
+                // value before anything had a chance to restore it.
+                //
+                // Instead: always try to keep whatever city is currently
+                // selected, and only actually clear it if that city does
+                // not exist in the new region's list. A real region change
+                // by the customer still correctly clears an incompatible
+                // city; a spurious same-region change event is now a
+                // no-op instead of data loss.
+                function updateSurneliCities() {
                     var regionCode = $('#billing_state').val();
                     var $cityField = $('#billing_city');
-                    var currentCityChoice = preserveSelection ? $cityField.val() : '';
+                    var currentCityChoice = $cityField.val();
+                    var cityStillValid = false;
+
+                    var options = '<option value="">აირჩიეთ ლოკაცია...</option>';
 
                     if (cityMap[regionCode]) {
-                        var options = '<option value="">აირჩიეთ ლოკაცია...</option>';
                         $.each(cityMap[regionCode], function (id, name) {
                            // Keeps the name as the value so the customer order looks pretty
                            options += '<option value="' + name + '">' + name + '</option>';
+                           if (name === currentCityChoice) {
+                               cityStillValid = true;
+                           }
                         });
+                    }
 
-                        $cityField.html(options);
+                    $cityField.html(options);
 
-                        if (currentCityChoice) {
-                            $cityField.val(currentCityChoice);
-                        }
-                    } else {
-                        $cityField.html('<option value="">აირჩიეთ ლოკაცია...</option>');
+                    if (cityStillValid) {
+                        $cityField.val(currentCityChoice);
                     }
 
                     if ($.fn.selectWoo) {
@@ -308,21 +403,29 @@ function surneli_checkout_city_logic() {
 
                 $(document.body).on('change', '#billing_state', function () {
                     $(document.body).trigger('update_checkout');
-                    updateSurneliCities(false);
+                    updateSurneliCities();
                 });
 
                 $(document.body).on('change', '#billing_city', function () {
                     $(document.body).trigger('update_checkout');
                 });
 
-                $(document).ajaxComplete(function (event, xhr, settings) {
-                    if (settings.url.indexOf('wc-ajax=update_order_review') > -1) {
-                        updateSurneliCities(true);
-                    }
-                });
+                // NOTE: we intentionally do NOT rebuild/re-select2 the city
+                // field on every update_order_review AJAX completion anymore.
+                // WooCommerce's AJAX response only ever replaces the order
+                // review table and payment box fragments - it never touches
+                // #billing_city - so that handler was purely defensive, but it
+                // raced with checkout.js's own debounced update_checkout_action
+                // (which reads #billing_city's live value 5ms after a change).
+                // When both fired close together, this rebuild could reset the
+                // field's value right before checkout.js read it, so a city the
+                // customer had just picked was sent to the server as blank/stale
+                // and silently lost. Region changes still rebuild the list via
+                // the #billing_state handler above, which is the only time the
+                // available city list actually changes.
 
                 setTimeout(function () {
-                    updateSurneliCities(true);
+                    updateSurneliCities();
                 }, 100);
             });
         </script>

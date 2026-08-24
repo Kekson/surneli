@@ -267,6 +267,24 @@ class Surneli_Phone_Auth {
 		return get_user_by('id', $user_id);
 	}
 
+	private static function sync_customer_from_order($user_id, $order) {
+		$customer = new WC_Customer($user_id);
+
+		foreach ($order->get_address('billing') as $key => $value) {
+			if ('' !== $value && is_callable([$customer, "set_billing_{$key}"])) {
+				$customer->{"set_billing_{$key}"}($value);
+			}
+		}
+
+		foreach ($order->get_address('shipping') as $key => $value) {
+			if ('' !== $value && is_callable([$customer, "set_shipping_{$key}"])) {
+				$customer->{"set_shipping_{$key}"}($value);
+			}
+		}
+
+		$customer->save();
+	}
+
 	/* ---------------------------------------------------------------
 	   Silently attach an account to a guest checkout order
 	--------------------------------------------------------------- */
@@ -293,6 +311,15 @@ class Surneli_Phone_Auth {
 
 		$order->set_customer_id($user->ID);
 		$order->save();
+
+		// WooCommerce only copies billing/shipping details into a
+		// customer's saved profile (for prefilling next time) when the
+		// shopper is already logged in DURING checkout. A first-time
+		// order here is placed as a guest - the account only exists
+		// after this point - so without this, name/address would never
+		// get saved for next time and the customer would have to retype
+		// everything on every order. Do it ourselves from the order.
+		self::sync_customer_from_order($user->ID, $order);
 
 		// Without this, WooCommerce sees the order now belongs to a real
 		// account and gates the order-received page behind a login form -
