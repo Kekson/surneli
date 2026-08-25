@@ -382,3 +382,30 @@ ul.products.products-container.grid .product-content {
 .woocommerce-EditAccountForm #account_email {
     display: none !important;
 }
+
+/* ----------------------------------------------------------------
+   Loading overlay (nav-click loader): the theme's "Loading Overlay"
+   Theme Option is off site-wide, which also removes the positioning
+   CSS it normally injects (porto/style-internal.php). We render the
+   overlay markup ourselves (functions.php: surneli_render_loading_overlay)
+   and js/nav-loader.js toggles it, so we ship the same CSS here.
+   ---------------------------------------------------------------- */
+.loading-overlay-showing > .loading-overlay {
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0;
+}
+.loading-overlay {
+    transition: visibility 0s ease-in-out 0.5s, opacity 0.5s ease-in-out;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    opacity: 0;
+    right: 0;
+    top: 0;
+    visibility: hidden;
+}
+body > .loading-overlay {
+    position: fixed;
+    z-index: 999999;
+}

@@ -1225,3 +1225,76 @@ add_action( 'woocommerce_single_product_summary', 'surneli_volume_purchase_note'
 function surneli_volume_purchase_note() {
     echo '<p class="surneli-volume-note">მილილიტრობით შეძენის შემთხვევაში თქვენ ყიდულობთ ორიგინალ სუნამოს შუშის ატომაიზერში</p>';
 }
+
+/**
+ * Belt-and-braces for the removed "Password change" fields on My Account
+ * (see woocommerce/myaccount/form-edit-account.php override): accounts on
+ * surneli.ge log in by mobile number / SMS code only (inc/phone-auth.php),
+ * so even if password fields were ever submitted (stale cached page, a
+ * direct POST, etc.), don't let WooCommerce act on them.
+ */
+add_action( 'wp_loaded', function () {
+	if ( isset( $_POST['action'] ) && 'save_account_details' === $_POST['action'] ) {
+		unset( $_POST['password_current'], $_POST['password_1'], $_POST['password_2'] );
+	}
+}, 5 );
+
+/**
+ * Show the theme's existing loading-overlay animation on every internal
+ * link click (page-to-page navigation), not just on first page load.
+ * See js/nav-loader.js.
+ */
+add_action( 'wp_enqueue_scripts', 'surneli_enqueue_nav_loader', 1002 );
+function surneli_enqueue_nav_loader() {
+	if ( is_admin() ) {
+		return;
+	}
+
+	wp_enqueue_script(
+		'surneli-nav-loader',
+		get_stylesheet_directory_uri() . '/js/nav-loader.js',
+		array( 'jquery-core', 'porto-theme', 'porto-loading-overlay' ),
+		filemtime( get_stylesheet_directory() . '/js/nav-loader.js' ),
+		true
+	);
+}
+
+/**
+ * Always render the theme's loading-overlay markup (the bounce-dot
+ * animation) on the front end, independent of the "Loading Overlay"
+ * Theme Option - that option also gates the CSS that makes it visible
+ * (see porto/style-internal.php), and it's off site-wide here. We ship
+ * our own copy of both (markup below, CSS in style.css) so the overlay
+ * (triggered on nav clicks by js/nav-loader.js) actually renders.
+ */
+add_action( 'wp_body_open', 'surneli_render_loading_overlay' );
+function surneli_render_loading_overlay() {
+	if ( is_admin() ) {
+		return;
+	}
+	echo '<div class="loading-overlay"><div class="bounce-loader"><div class="bounce1"></div><div class="bounce2"></div><div class="bounce3"></div></div></div>';
+}
+
+/**
+ * Point the header logo at the Shop page instead of the homepage.
+ * Porto's porto_logo() (porto/inc/functions/layout.php) hardcodes
+ * home_url('/') inline in the <a href="..."> and only exposes a
+ * filter over the whole rendered HTML block ('porto_logo'), so we
+ * swap the href there rather than editing the parent theme.
+ */
+add_filter( 'porto_logo', 'surneli_logo_links_to_shop' );
+function surneli_logo_links_to_shop( $html ) {
+	$shop_url = function_exists( 'wc_get_page_id' ) ? get_permalink( wc_get_page_id( 'shop' ) ) : false;
+	if ( ! $shop_url ) {
+		$shop_url = home_url( '/shop' );
+	}
+
+	$home_href = 'href="' . esc_url( home_url( '/' ) ) . '"';
+	$shop_href = 'href="' . esc_url( $shop_url ) . '"';
+
+	$html = str_replace( $home_href, $shop_href, $html );
+	// The logo link's rel="home" no longer applies once it points elsewhere.
+	$html = str_replace( ' rel="home"', '', $html );
+
+	return $html;
+}
