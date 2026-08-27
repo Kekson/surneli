@@ -1272,7 +1272,23 @@ function surneli_render_loading_overlay() {
 	if ( is_admin() ) {
 		return;
 	}
+	// Overlay markup (the bounce-dot animation itself).
 	echo '<div class="loading-overlay"><div class="bounce-loader"><div class="bounce1"></div><div class="bounce2"></div><div class="bounce3"></div></div></div>';
+
+	// Inline (no `src` attribute) vanilla-JS click handler - deliberately
+	// NOT a separate enqueued file. WP Rocket's "Delay JavaScript
+	// Execution" rewrites every external <script src="..."> (including
+	// nav-loader.js and even jQuery itself) into a tag that only runs
+	// after the visitor's first interaction. That means the very click
+	// we want to react to can happen before nav-loader.js has loaded at
+	// all, so no loader shows and the page looks like it did nothing for
+	// a moment (seen on the mobile sticky bottom nav bar - a real,
+	// plain <a href> link, not excluded by anything in nav-loader.js,
+	// but its first-ever click on a fresh page beat the deferred JS).
+	// Inline scripts with no `src` are not touched by that delay
+	// feature, so this small duplicate of nav-loader.js's click logic
+	// (plain JS, no jQuery dependency) is guaranteed ready immediately.
+	echo '<script>(function(){var body=document.body,t=null;function excluded(a){var h=a.getAttribute("href");if(!h||h.charAt(0)==="#"||h.indexOf("javascript:")===0||h.indexOf("mailto:")===0||h.indexOf("tel:")===0||h.indexOf("sms:")===0)return true;if(a.getAttribute("target")==="_blank"||a.hasAttribute("download"))return true;if(a.classList.contains("no-loading-overlay")||a.closest(".no-loading-overlay"))return true;if(a.classList.contains("ajax_add_to_cart")||a.classList.contains("add_to_wishlist")||a.classList.contains("add_to_compare")||a.classList.contains("open-quick-view")||a.classList.contains("remove"))return true;if(a.hasAttribute("data-toggle")||a.hasAttribute("data-bs-toggle")||a.hasAttribute("data-product_id")||a.hasAttribute("data-cart_item_key")||a.getAttribute("role")==="button")return true;try{if(a.hostname&&a.hostname!==window.location.hostname)return true;}catch(e){}return false;}document.addEventListener("click",function(e){if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a||excluded(a))return;body.classList.add("loading-overlay-showing");if(t)clearTimeout(t);t=setTimeout(function(){body.classList.remove("loading-overlay-showing");},8000);},false);window.addEventListener("pageshow",function(e){if(e.persisted)body.classList.remove("loading-overlay-showing");});})();</script>';
 }
 
 /**
