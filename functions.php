@@ -1314,3 +1314,33 @@ function surneli_logo_links_to_shop( $html ) {
 
 	return $html;
 }
+
+/**
+ * Fragrantica-style pink/blue gradient accent on shop/category product
+ * cards, based on the site's own "სქესი" (gender) product attribute - the pa_gender
+ * taxonomy behind the "სქესი" filter widget on the shop page, with terms
+ * "კაცი" (man) and "ქალი" (woman). Woman-only -> pink, man-only ->
+ * blue, both terms assigned (unisex) or neither -> leave the card as-is.
+ * Hooks the same 'woocommerce_post_class' filter WooCommerce itself uses
+ * to build the <li> classes in woocommerce/content-product.php, so this
+ * applies everywhere product cards are looped (shop, categories, search,
+ * related products, Elementor product grids) without a template copy.
+ */
+add_filter( 'woocommerce_post_class', 'surneli_add_gender_gradient_class', 10, 2 );
+function surneli_add_gender_gradient_class( $classes, $product ) {
+	if ( ! $product instanceof WC_Product || ! taxonomy_exists( 'pa_gender' ) ) {
+		return $classes;
+	}
+
+	$terms = wc_get_product_terms( $product->get_id(), 'pa_gender', array( 'fields' => 'names' ) );
+	$has_man   = in_array( 'კაცი', $terms, true );
+	$has_woman = in_array( 'ქალი', $terms, true );
+
+	if ( $has_man && ! $has_woman ) {
+		$classes[] = 'surneli-gender-man';
+	} elseif ( $has_woman && ! $has_man ) {
+		$classes[] = 'surneli-gender-woman';
+	}
+
+	return $classes;
+}

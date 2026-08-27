@@ -409,3 +409,16 @@ body > .loading-overlay {
     position: fixed;
     z-index: 999999;
 }
+
+/* Fragrantica-style pink/blue gradient accent by gender - class added
+   server-side in functions.php (surneli_add_gender_gradient_class). */
+.product-col.surneli-gender-woman .product-content {
+    background: linear-gradient(180deg, rgba(255, 105, 180, 0.16) 0%, rgba(255, 105, 180, 0.05) 55%, rgba(255, 105, 180, 0) 100%);
+    border-top: 3px solid transparent;
+    border-image: linear-gradient(90deg, #ff9ac8, #ff4fa0) 1;
+}
+.product-col.surneli-gender-man .product-content {
+    background: linear-gradient(180deg, rgba(64, 158, 255, 0.16) 0%, rgba(64, 158, 255, 0.05) 55%, rgba(64, 158, 255, 0) 100%);
+    border-top: 3px solid transparent;
+    border-image: linear-gradient(90deg, #7ec2ff, #2f7fdd) 1;
+}
