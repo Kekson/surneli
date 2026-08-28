@@ -1185,7 +1185,7 @@ function surneli_custom_order_tracking_handler() {
 }
 
 
-add_action( 'woocommerce_after_add_to_cart_button', 'surneli_Bauthenticity_box' );
+add_action( 'woocommerce_after_add_to_cart_button', 'surneli_authenticity_box' );
 function surneli_authenticity_box() {
     ?>
     <div class="surneli-authenticity-box">
