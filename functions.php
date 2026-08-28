@@ -1185,7 +1185,7 @@ function surneli_custom_order_tracking_handler() {
 }
 
 
-add_action( 'woocommerce_after_add_to_cart_button', 'surneli_authenticity_box' );
+add_action( 'woocommerce_after_add_to_cart_button', 'surneli_Bauthenticity_box' );
 function surneli_authenticity_box() {
     ?>
     <div class="surneli-authenticity-box">
@@ -1199,7 +1199,7 @@ function surneli_authenticity_box() {
         <div>
             <div class="surneli-authenticity-box__title">ავთენტურობის გარანტია</div>
             <p>ჩვენს საიტზე განთავსებული ყველა სუნამო არის ორიგინალი</p>
-            <a href="/authenticity" class="surneli-authenticity-box__link">შეიტყვეთ მეტი</a>
+            <a href="/originali-sunamoebi" class="surneli-authenticity-box__link">შეიტყვეთ მეტი</a>
         </div>
     </div>
     <?php
