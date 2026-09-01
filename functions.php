@@ -1336,9 +1336,11 @@ function surneli_add_gender_gradient_class( $classes, $product ) {
 	$has_man   = in_array( 'კაცი', $terms, true );
 	$has_woman = in_array( 'ქალი', $terms, true );
 
-	if ( $has_man && ! $has_woman ) {
+	if ( $has_man && $has_woman ) {
+		$classes[] = 'surneli-gender-both';
+	} elseif ( $has_man ) {
 		$classes[] = 'surneli-gender-man';
-	} elseif ( $has_woman && ! $has_man ) {
+	} elseif ( $has_woman ) {
 		$classes[] = 'surneli-gender-woman';
 	}
 
