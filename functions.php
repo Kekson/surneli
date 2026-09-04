@@ -461,7 +461,8 @@ function surneli_apply_complex_shipping_rates($rates, $package) {
             // Tier 2 
             if (in_array($found_id, $tier2_locations)) {
                 if ($cart_total >= 150) {
-                    unset($rates[$rate_key]);
+                    $rates[$rate_key]->cost = 0;
+                    $rates[$rate_key]->label = 'უფასო მიწოდება';
                 } else {
                     $rates[$rate_key]->cost = ($cart_total >= 50) ? 4.00 : 8.00;
                 }
@@ -469,7 +470,8 @@ function surneli_apply_complex_shipping_rates($rates, $package) {
             // Tier 1 (Tbilisi Center) - Check if the hidden ID starts with 'TBI'
             elseif (strpos($found_id, 'TBI') === 0) {
                 if ($cart_total >= 150) {
-                    unset($rates[$rate_key]);
+                    $rates[$rate_key]->cost = 0;
+                    $rates[$rate_key]->label = 'უფასო მიწოდება';
                 } else {
                     $rates[$rate_key]->cost = 6.00; // Success! Forcing 5 GEL.
                 }
@@ -477,7 +479,8 @@ function surneli_apply_complex_shipping_rates($rates, $package) {
             // Tier 3 (Villages and everything else)
             elseif (!empty($chosen_city_name)) {
                 if ($cart_total >= 150) {
-                    unset($rates[$rate_key]);
+                    $rates[$rate_key]->cost = 0;
+                    $rates[$rate_key]->label = 'უფასო მიწოდება';
                 } else {
                     $rates[$rate_key]->cost = ($cart_total >= 50) ? 7.00 : 12.00;
                 }
