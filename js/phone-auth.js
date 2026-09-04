@@ -14,6 +14,13 @@
 			return;
 		}
 
+		// Set on the global/form-login.php template (the "please log in to
+		// view this order" gate on order-received, etc.) so a successful
+		// verification sends the customer back to the page that required
+		// login instead of always landing on the shop page. Absent (and
+		// harmless) on myaccount/form-login.php, which has no such caller.
+		var redirectTo = root.getAttribute('data-redirect') || '';
+
 		var stepPhone = root.querySelector('[data-step="phone"]');
 		var stepCode = root.querySelector('[data-step="code"]');
 		var stepLoading = root.querySelector('[data-step="loading"]');
@@ -96,7 +103,7 @@
 			codeError.textContent = '';
 			showStep(stepLoading);
 
-			post('surneli_verify_code', { phone: currentPhone, code: code })
+			post('surneli_verify_code', { phone: currentPhone, code: code, redirect: redirectTo })
 				.then(function (res) {
 					if (res.success) {
 						window.location.href = res.data.redirect;

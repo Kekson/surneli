@@ -218,8 +218,17 @@ class Surneli_Phone_Auth {
 		wp_set_auth_cookie($user->ID, true); // true = "remember me", extended below
 		do_action('wp_login', $user->user_login, $user);
 
+		// Sent by global/form-login.php (e.g. the order-received "please log
+		// in" gate) so a customer lands back on the page that required
+		// login rather than always the shop - myaccount/form-login.php
+		// never sends this, so $_POST['redirect'] is simply absent there.
+		// wp_validate_redirect keeps this to a same-site URL only.
+		$shop_url    = wc_get_page_permalink('shop');
+		$requested   = isset($_POST['redirect']) ? esc_url_raw(wp_unslash($_POST['redirect'])) : '';
+		$redirect_to = $requested ? wp_validate_redirect($requested, $shop_url) : $shop_url;
+
 		wp_send_json_success([
-			'redirect' => wc_get_page_permalink('shop'),
+			'redirect' => $redirect_to,
 		]);
 	}
 
