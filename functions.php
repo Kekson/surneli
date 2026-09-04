@@ -485,30 +485,52 @@ function surneli_apply_complex_shipping_rates($rates, $package) {
     $cart_total = WC()->cart->get_subtotal();
     $tier       = surneli_get_shipping_tier(WC()->customer->get_billing_city());
 
+    // Some zones (e.g. Tbilisi) already have their own native "Free
+    // Shipping" method configured and it can independently qualify at the
+    // same time we'd force the flat rate to 0 - showing the customer two
+    // identical "უფასო მიწოდება" options. If one's already present, defer
+    // to it and just remove our flat rate instead of also zeroing it out;
+    // only force the flat rate to 0 as a fallback when no such method
+    // exists on this package at all (the original bug this was written
+    // to fix - a zone with no Free Shipping method left with zero options).
+    $has_native_free_shipping = false;
+    foreach ($rates as $rate) {
+        if ('free_shipping' === $rate->method_id) {
+            $has_native_free_shipping = true;
+            break;
+        }
+    }
+
     foreach ($rates as $rate_key => $rate) {
         if ('flat_rate' !== $rate->method_id) {
             continue;
         }
+
+        $make_free = function () use (&$rates, $rate_key, $has_native_free_shipping) {
+            if ($has_native_free_shipping) {
+                unset($rates[$rate_key]);
+            } else {
+                $rates[$rate_key]->cost = 0;
+                $rates[$rate_key]->label = 'უფასო მიწოდება';
+            }
+        };
 
         if (1 === $tier) {
             // Tbilisi center: free from 50 GEL. Below that, leave this
             // rate's cost exactly as the shipping zone has it configured
             // rather than guessing a number of our own.
             if ($cart_total >= 50) {
-                $rates[$rate_key]->cost = 0;
-                $rates[$rate_key]->label = 'უფასო მიწოდება';
+                $make_free();
             }
         } elseif (2 === $tier) {
             if ($cart_total >= 150) {
-                $rates[$rate_key]->cost = 0;
-                $rates[$rate_key]->label = 'უფასო მიწოდება';
+                $make_free();
             } else {
                 $rates[$rate_key]->cost = ($cart_total >= 50) ? 4.00 : 8.00;
             }
         } elseif (3 === $tier) {
             if ($cart_total >= 150) {
-                $rates[$rate_key]->cost = 0;
-                $rates[$rate_key]->label = 'უფასო მიწოდება';
+                $make_free();
             } else {
                 $rates[$rate_key]->cost = ($cart_total >= 50) ? 7.00 : 12.00;
             }
