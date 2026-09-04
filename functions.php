@@ -491,6 +491,19 @@ function surneli_apply_complex_shipping_rates($rates, $package) {
     return $rates;
 }
 
+/**
+ * 3b. Free-shipping progress bar threshold
+ * Porto's built-in "Add X and get free shipping" bar (porto/inc/lib/
+ * woocommerce-shipping-progress-bar) normally reads its threshold from an
+ * actual WooCommerce "Free Shipping" method configured on the matched
+ * shipping zone. Our custom logic above makes shipping free at 150 GEL
+ * regardless of zone/tier, so tell the bar that directly instead of
+ * depending on a Free Shipping method being set up per zone.
+ */
+add_filter('porto_free_shipping_threshold', function ($threshold) {
+    return 150;
+});
+
 add_filter('woocommerce_checkout_fields', 'surneli_custom_checkout_fields', 9999);
 function surneli_custom_checkout_fields($fields)
 {
