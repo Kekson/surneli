@@ -435,15 +435,27 @@ function surneli_checkout_city_logic() {
 
 /**
  * 3. Complex Shipping Logic with Reverse-Lookup
+ *
+ * Confirmed pricing (from the store owner, Sept 2026):
+ *   Tbilisi center:            free from 50 GEL, otherwise the zone's own rate
+ *   Tbilisi suburbs/regional hubs: 8 GEL under 50, 4 GEL under 150, free at 150+
+ *   Villages / everything else:    12 GEL under 50, 7 GEL under 150, free at 150+
  */
-add_filter('woocommerce_package_rates', 'surneli_apply_complex_shipping_rates', 100, 2);
-function surneli_apply_complex_shipping_rates($rates, $package) {
-    $cart_total = WC()->cart->get_subtotal();
-    
-    // WooCommerce gives us the beautiful name (e.g. "აბანოთუბანი")
-    $chosen_city_name = WC()->customer->get_billing_city();
-    
-    // We reverse-lookup the name to find the hidden ID (e.g. "TBI1")
+
+/**
+ * Classify a billing city name into a shipping tier:
+ *   1 = Tbilisi center, 2 = Tbilisi suburbs/regional hub cities,
+ *   3 = villages/everything else with a city chosen, 0 = no city chosen yet.
+ * Shared by the per-rate pricing below and the free-shipping progress bar
+ * threshold, so the two numbers can't drift out of sync with each other.
+ */
+function surneli_get_shipping_tier($chosen_city_name) {
+    if (empty($chosen_city_name)) {
+        return 0;
+    }
+
+    // Reverse-lookup the display name (e.g. "აბანოთუბანი") to find the
+    // hidden ID (e.g. "TBI1") WooCommerce doesn't otherwise expose here.
     $city_map = get_surneli_city_map();
     $found_id = '';
     foreach ($city_map as $region => $cities) {
@@ -455,37 +467,53 @@ function surneli_apply_complex_shipping_rates($rates, $package) {
 
     $tier2_locations = array('TBI3', 'TBI20', 'TBI25', 'TBI26', 'TBI29', 'TBI30', 'TBI41', 'TBI47', 'TBI48', 'TBI50', 'TBI52', 'TBI53', 'TBI54', 'ADJ1', 'ADJ8', 'IME22', 'IME9', 'IME17', 'KAX28', 'KAX47', 'KAX62', 'QQA23', 'QQA19', 'QQA4', 'SQA12', 'SQA37', 'SZS9', 'SZS30', 'SZS26', 'JAV9', 'JAV7');
 
+    if (in_array($found_id, $tier2_locations)) {
+        return 2;
+    }
+
+    // Tbilisi center - hidden ID starts with 'TBI' but isn't one of the
+    // suburb/hub IDs above.
+    if (strpos($found_id, 'TBI') === 0) {
+        return 1;
+    }
+
+    return 3;
+}
+
+add_filter('woocommerce_package_rates', 'surneli_apply_complex_shipping_rates', 100, 2);
+function surneli_apply_complex_shipping_rates($rates, $package) {
+    $cart_total = WC()->cart->get_subtotal();
+    $tier       = surneli_get_shipping_tier(WC()->customer->get_billing_city());
+
     foreach ($rates as $rate_key => $rate) {
-        if ('flat_rate' === $rate->method_id) {
-            
-            // Tier 2 
-            if (in_array($found_id, $tier2_locations)) {
-                if ($cart_total >= 150) {
-                    $rates[$rate_key]->cost = 0;
-                    $rates[$rate_key]->label = 'უფასო მიწოდება';
-                } else {
-                    $rates[$rate_key]->cost = ($cart_total >= 50) ? 4.00 : 8.00;
-                }
-            } 
-            // Tier 1 (Tbilisi Center) - Check if the hidden ID starts with 'TBI'
-            elseif (strpos($found_id, 'TBI') === 0) {
-                if ($cart_total >= 150) {
-                    $rates[$rate_key]->cost = 0;
-                    $rates[$rate_key]->label = 'უფასო მიწოდება';
-                } else {
-                    $rates[$rate_key]->cost = 6.00; // Success! Forcing 5 GEL.
-                }
-            } 
-            // Tier 3 (Villages and everything else)
-            elseif (!empty($chosen_city_name)) {
-                if ($cart_total >= 150) {
-                    $rates[$rate_key]->cost = 0;
-                    $rates[$rate_key]->label = 'უფასო მიწოდება';
-                } else {
-                    $rates[$rate_key]->cost = ($cart_total >= 50) ? 7.00 : 12.00;
-                }
+        if ('flat_rate' !== $rate->method_id) {
+            continue;
+        }
+
+        if (1 === $tier) {
+            // Tbilisi center: free from 50 GEL. Below that, leave this
+            // rate's cost exactly as the shipping zone has it configured
+            // rather than guessing a number of our own.
+            if ($cart_total >= 50) {
+                $rates[$rate_key]->cost = 0;
+                $rates[$rate_key]->label = 'უფასო მიწოდება';
+            }
+        } elseif (2 === $tier) {
+            if ($cart_total >= 150) {
+                $rates[$rate_key]->cost = 0;
+                $rates[$rate_key]->label = 'უფასო მიწოდება';
+            } else {
+                $rates[$rate_key]->cost = ($cart_total >= 50) ? 4.00 : 8.00;
+            }
+        } elseif (3 === $tier) {
+            if ($cart_total >= 150) {
+                $rates[$rate_key]->cost = 0;
+                $rates[$rate_key]->label = 'უფასო მიწოდება';
+            } else {
+                $rates[$rate_key]->cost = ($cart_total >= 50) ? 7.00 : 12.00;
             }
         }
+        // tier 0 (no city chosen yet): leave the zone's default rate untouched.
     }
 
     return $rates;
@@ -496,12 +524,14 @@ function surneli_apply_complex_shipping_rates($rates, $package) {
  * Porto's built-in "Add X and get free shipping" bar (porto/inc/lib/
  * woocommerce-shipping-progress-bar) normally reads its threshold from an
  * actual WooCommerce "Free Shipping" method configured on the matched
- * shipping zone. Our custom logic above makes shipping free at 150 GEL
- * regardless of zone/tier, so tell the bar that directly instead of
- * depending on a Free Shipping method being set up per zone.
+ * shipping zone. Our custom logic above makes the real free-shipping
+ * cutoff tier-dependent (50 GEL in Tbilisi center, 150 GEL everywhere
+ * else), so tell the bar the same number instead of depending on a Free
+ * Shipping method being set up per zone.
  */
 add_filter('porto_free_shipping_threshold', function ($threshold) {
-    return 150;
+    $tier = surneli_get_shipping_tier(WC()->customer->get_billing_city());
+    return (1 === $tier) ? 50 : 150;
 });
 
 add_filter('woocommerce_checkout_fields', 'surneli_custom_checkout_fields', 9999);
